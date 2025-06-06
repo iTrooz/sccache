@@ -253,12 +253,15 @@ impl OverlayBuilder {
 
     fn perform_build(
         bubblewrap: &Path,
-        compile_command: CompileCommand,
+        mut compile_command: CompileCommand,
         inputs_rdr: InputsReader,
         output_paths: Vec<String>,
         overlay: &OverlaySpec,
     ) -> Result<BuildResult> {
         trace!("Compile environment: {:?}", compile_command.env_vars);
+        // Skip the CARGO_MAKEFLAGS environment variable
+        compile_command.env_vars.retain(|(k, _)| k != "CARGO_MAKEFLAGS");
+        trace!("Compile environment AFTER: {:?}", compile_command.env_vars);
         trace!(
             "Compile command: {:?} {:?}",
             compile_command.executable,
