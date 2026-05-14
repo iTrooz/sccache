@@ -35,19 +35,6 @@ use cmdline::{AuthSubcommand, Command};
 
 pub const INSECURE_DIST_SERVER_TOKEN: &str = "dangerously_insecure_server";
 
-#[cfg(not(any(
-    all(target_os = "linux", target_arch = "x86_64"),
-    target_os = "freebsd"
-)))]
-fn main() {
-    compile_error!("Distributed compilation is only supported on Linux/x86_64 and FreeBSD!");
-}
-
-// Only supported on x86_64 Linux machines and on FreeBSD
-#[cfg(any(
-    all(target_os = "linux", target_arch = "x86_64"),
-    target_os = "freebsd"
-))]
 fn main() {
     init_logging();
 
