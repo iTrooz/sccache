@@ -1,3 +1,11 @@
+# Soft Fork Notice
+
+This branch (main) is a soft-fork of https://github.com/mozilla/sccache , adding the features I find useful.
+
+A container image is available at ghcr.io/itrooz/sccache:custom. See https://github.com/iTrooz/sccache-deploy for more information.
+
+# Original README
+
 [![Build Status](https://github.com/mozilla/sccache/workflows/ci/badge.svg)](https://github.com/mozilla/sccache/actions?query=workflow%3Aci)
 [![Crates.io](https://img.shields.io/crates/v/sccache.svg)](https://crates.io/crates/sccache)
 [![Matrix](https://img.shields.io/matrix/sccache:mozilla.org)](https://chat.mozilla.org/#/room/#sccache:mozilla.org)
