@@ -34,6 +34,8 @@ toolchains = []
 # the maximum size of the toolchain cache in bytes
 toolchain_cache_size = 5368709120
 cache_dir = "/home/user/.cache/sccache-dist-client"
+# If true, jobs that can be remote compilated trigger an error instead of fallback back locally
+# force_remote_build = false
 
 [dist.auth]
 type = "token"
