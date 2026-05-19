@@ -384,9 +384,9 @@ impl DistClientContainer {
                         );
                         DistClientState::Some(Box::new(config), Arc::new(dist_client))
                     }
-                    Err(_) => {
+                    Err(err) => {
                         warn!(
-                            "Scheduler address configured, but could not communicate with scheduler"
+                            "Scheduler address configured, but could not communicate with scheduler: {err}"
                         );
                         DistClientState::RetryCreateAt(
                             Box::new(config),
