@@ -484,6 +484,10 @@ fn handle_compile_finished(
         response.color_mode,
     )?;
 
+    if let Some(cache_status) = &response.cache_status {
+        debug!("Compile finished with cache status: {:?}", cache_status);
+    }
+
     if let Some(ret) = response.retcode {
         trace!("compiler exited with status {}", ret);
         Ok(ret)
