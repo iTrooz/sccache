@@ -148,6 +148,12 @@ $ sccache --dist-status
 {"SchedulerStatus":["https://sccache1.corpdmz.ber3.mozilla.com/",{"num_servers":3,"num_cpus":56,"in_progress":24}]}
 ```
 
+You can test HTTPS connectivity to all build servers before compiling:
+
+```
+$ sccache --dist-test-conn
+```
+
 Using custom toolchains
 -----------------------
 

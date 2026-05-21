@@ -3398,9 +3398,9 @@ LLVM version: 6.0",
 mod test_dist {
     use crate::dist::pkg;
     use crate::dist::{
-        self, AllocJobResult, CompileCommand, JobAlloc, JobComplete, JobId, OutputData,
-        PathTransformer, ProcessOutput, RunJobResult, SchedulerStatusResult, ServerId,
-        SubmitToolchainResult, Toolchain,
+        self, AllocJobResult, CompileCommand, ConnectionTestResult, JobAlloc, JobComplete, JobId,
+        OutputData, PathTransformer, ProcessOutput, RunJobResult, SchedulerStatusResult,
+        ServerId, SubmitToolchainResult, Toolchain,
     };
     use async_trait::async_trait;
     use std::path::{Path, PathBuf};
@@ -3421,6 +3421,9 @@ mod test_dist {
             unreachable!()
         }
         async fn do_get_status(&self) -> Result<SchedulerStatusResult> {
+            unreachable!()
+        }
+        async fn do_test_connections(&self) -> Result<ConnectionTestResult> {
             unreachable!()
         }
         async fn do_submit_toolchain(
@@ -3478,6 +3481,9 @@ mod test_dist {
             Err(anyhow!("MOCK: alloc job failure"))
         }
         async fn do_get_status(&self) -> Result<SchedulerStatusResult> {
+            unreachable!()
+        }
+        async fn do_test_connections(&self) -> Result<ConnectionTestResult> {
             unreachable!()
         }
         async fn do_submit_toolchain(
@@ -3552,6 +3558,9 @@ mod test_dist {
         async fn do_get_status(&self) -> Result<SchedulerStatusResult> {
             unreachable!("fn do_get_status is not used for this test. qed")
         }
+        async fn do_test_connections(&self) -> Result<ConnectionTestResult> {
+            unreachable!("fn do_test_connections is not used for this test. qed")
+        }
         async fn do_submit_toolchain(
             &self,
             job_alloc: JobAlloc,
@@ -3624,6 +3633,9 @@ mod test_dist {
             })
         }
         async fn do_get_status(&self) -> Result<SchedulerStatusResult> {
+            unreachable!()
+        }
+        async fn do_test_connections(&self) -> Result<ConnectionTestResult> {
             unreachable!()
         }
         async fn do_submit_toolchain(
@@ -3712,6 +3724,9 @@ mod test_dist {
         async fn do_get_status(&self) -> Result<SchedulerStatusResult> {
             unreachable!("fn do_get_status is not used for this test. qed")
         }
+        async fn do_test_connections(&self) -> Result<ConnectionTestResult> {
+            unreachable!("fn do_test_connections is not used for this test. qed")
+        }
         async fn do_submit_toolchain(
             &self,
             job_alloc: JobAlloc,
@@ -3782,6 +3797,9 @@ mod test_dist {
         }
         async fn do_get_status(&self) -> Result<SchedulerStatusResult> {
             self.0.do_get_status().await
+        }
+        async fn do_test_connections(&self) -> Result<ConnectionTestResult> {
+            self.0.do_test_connections().await
         }
         async fn do_submit_toolchain(
             &self,

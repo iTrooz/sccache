@@ -64,6 +64,8 @@ pub enum Command {
     ZeroStats,
     /// Show the status of the distributed client.
     DistStatus,
+    /// Test HTTPS connectivity to all distributed build servers.
+    DistTestConn,
     /// Perform a login to authenticate for distributed compilation.
     DistAuth,
     /// Package a toolchain for distributed compilation (executable, out)
@@ -150,6 +152,9 @@ fn get_clap_command() -> clap::Command {
             flag_infer_long("dist-status")
                 .help("show status of the distributed client")
                 .action(ArgAction::SetTrue),
+            flag_infer_long("dist-test-conn")
+                .help("test HTTPS connectivity to all distributed build servers")
+                .action(ArgAction::SetTrue),
             flag_infer_long("package-toolchain")
                 .help("package toolchain for distributed compilation")
                 .value_parser(clap::value_parser!(PathBuf))
@@ -171,6 +176,7 @@ fn get_clap_command() -> clap::Command {
                     "dist-auth",
                     "debug-preprocessor-cache",
                     "dist-status",
+                    "dist-test-conn",
                     "show-stats",
                     "show-adv-stats",
                     "start-server",
@@ -283,6 +289,8 @@ pub fn try_parse() -> Result<Command> {
                 Ok(Command::DistAuth)
             } else if matches.get_flag("dist-status") {
                 Ok(Command::DistStatus)
+            } else if matches.get_flag("dist-test-conn") {
+                Ok(Command::DistTestConn)
             } else if matches.contains_id("package-toolchain") {
                 let mut toolchain_values = matches
                     .get_many("package-toolchain")

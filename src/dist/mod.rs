@@ -598,6 +598,22 @@ pub struct SchedulerStatusResult {
     pub servers: Vec<BuildServerStatus>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BuildServerConnectionResult {
+    pub address: String,
+    pub success: bool,
+    pub message: String,
+    pub request_time_ms: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionTestResult {
+    pub num_servers: usize,
+    pub servers: Vec<BuildServerConnectionResult>,
+}
+
 // SubmitToolchain
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -735,6 +751,8 @@ pub trait Client: Send + Sync {
     async fn do_alloc_job(&self, tc: Toolchain) -> Result<AllocJobResult>;
     // To Scheduler
     async fn do_get_status(&self) -> Result<SchedulerStatusResult>;
+    // To Scheduler and Servers
+    async fn do_test_connections(&self) -> Result<ConnectionTestResult>;
     // To Server
     async fn do_submit_toolchain(
         &self,

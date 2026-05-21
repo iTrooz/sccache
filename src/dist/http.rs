@@ -233,6 +233,11 @@ pub mod urls {
         );
         reqwest::Url::parse(&url).expect("failed to create run job url")
     }
+
+    pub fn server_health(server_id: ServerId) -> reqwest::Url {
+        let url = format!("https://{}/health", server_id.addr());
+        reqwest::Url::parse(&url).expect("failed to create health url")
+    }
 }
 
 #[cfg(feature = "dist-server")]
@@ -1037,6 +1042,9 @@ mod server {
                 let req_id = request_count.fetch_add(1, atomic::Ordering::SeqCst);
                 trace!("Req {} ({}): {:?}", req_id, request.remote_addr(), request);
                 let response = (|| router!(request,
+                    (GET) (/health) => {
+                        rouille::Response::text("OK")
+                    },
                     (POST) (/api/v1/distserver/assign_job/{job_id: JobId}) => {
                         job_auth_or_401!(request, &job_authorizer, job_id);
                         let toolchain = try_or_400_log!(req_id, bincode_input(request));
@@ -1121,8 +1129,9 @@ mod client {
     use super::super::cache;
     use crate::dist::pkg::{InputsPackager, ToolchainPackager};
     use crate::dist::{
-        self, AllocJobResult, CompileCommand, JobAlloc, PathTransformer, RunJobResult,
-        SchedulerStatusResult, SubmitToolchainResult, Toolchain,
+        self, AllocJobResult, BuildServerConnectionResult, CompileCommand, ConnectionTestResult,
+        JobAlloc, PathTransformer, RunJobResult, SchedulerStatusResult, ServerId,
+        SubmitToolchainResult, Toolchain,
     };
     use crate::server::DistClientConfig;
 
@@ -1131,7 +1140,7 @@ mod client {
     use flate2::Compression;
     use flate2::write::ZlibEncoder as ZlibWriteEncoder;
     use futures::TryFutureExt;
-    use reqwest::Body;
+    use reqwest::{Body, StatusCode};
     use std::collections::HashMap;
     use std::io::Write;
     use std::path::{Path, PathBuf};
@@ -1224,6 +1233,59 @@ mod client {
             certs.insert(cert_digest, cert_pem);
             Ok(())
         }
+
+        /// Ensure the client trusts the certificate currently published for a build server.
+        async fn ensure_server_certificate(&self, server_id: ServerId) -> Result<()> {
+            let scheduler_url = self.scheduler_url.clone();
+            let client = self.client.clone();
+            let server_certs = self.server_certs.clone();
+            let url = urls::scheduler_server_certificate(&scheduler_url, server_id);
+            let req = client.lock().unwrap().get(url);
+            let res: ServerCertificateHttpResponse = bincode_req_fut(req)
+                .await
+                .context("GET to scheduler server_certificate failed")?;
+
+            // TODO: Move to asynchronous reqwest client only.
+            // This function internally builds a blocking reqwest client;
+            // However, it does so by utilizing a runtime which it drops,
+            // triggering (rightfully) a sanity check that prevents from
+            // dropping a runtime in asynchronous context.
+            // For the time being, we work around this by off-loading it
+            // to a dedicated blocking-friendly thread pool.
+            let _ = self
+                .pool
+                .spawn_blocking(move || {
+                    Self::update_certs(
+                        &mut client.lock().unwrap(),
+                        &mut server_certs.lock().unwrap(),
+                        res.cert_digest,
+                        res.cert_pem,
+                    )
+                    .context("Failed to update certificate")
+                    .unwrap_or_else(|e| warn!("Failed to update certificate: {:?}", e));
+                })
+                .await;
+
+            Ok(())
+        }
+
+        /// Probe a build server over HTTPS via its health endpoint.
+        async fn probe_server_connection(&self, server_id: ServerId) -> Result<String> {
+            let url = urls::server_health(server_id);
+            let request = self
+                .client
+                .lock()
+                .unwrap()
+                .get(url)
+                .header(reqwest::header::CONNECTION, "close");
+            let response = request.send().await?;
+            let status = response.status();
+            if status == StatusCode::OK {
+                Ok(status.to_string())
+            } else {
+                bail!("unexpected HTTP status {status}")
+            }
+        }
     }
 
     #[async_trait]
@@ -1234,7 +1296,6 @@ mod client {
             let mut req = self.client.lock().unwrap().post(url);
             req = req.bearer_auth(self.auth_token.clone()).bincode(&tc)?;
 
-            let client = self.client.clone();
             let server_certs = self.server_certs.clone();
 
             match bincode_req_fut(req).await? {
@@ -1255,32 +1316,7 @@ mod client {
                         "Need to request new certificate for server {}",
                         server_id.addr()
                     );
-                    let url = urls::scheduler_server_certificate(&scheduler_url, server_id);
-                    let req = client.lock().unwrap().get(url);
-                    let res: ServerCertificateHttpResponse = bincode_req_fut(req)
-                        .await
-                        .context("GET to scheduler server_certificate failed")?;
-
-                    // TODO: Move to asynchronous reqwest client only.
-                    // This function internally builds a blocking reqwest client;
-                    // However, it does so by utilizing a runtime which it drops,
-                    // triggering (rightfully) a sanity check that prevents from
-                    // dropping a runtime in asynchronous context.
-                    // For the time being, we work around this by off-loading it
-                    // to a dedicated blocking-friendly thread pool.
-                    let _ = self
-                        .pool
-                        .spawn_blocking(move || {
-                            Self::update_certs(
-                                &mut client.lock().unwrap(),
-                                &mut server_certs.lock().unwrap(),
-                                res.cert_digest,
-                                res.cert_pem,
-                            )
-                            .context("Failed to update certificate")
-                            .unwrap_or_else(|e| warn!("Failed to update certificate: {:?}", e));
-                        })
-                        .await;
+                    self.ensure_server_certificate(server_id).await?;
 
                     alloc_job_res
                 }
@@ -1293,6 +1329,42 @@ mod client {
             let url = urls::scheduler_status(&scheduler_url);
             let req = self.client.lock().unwrap().get(url);
             bincode_req_fut(req).await
+        }
+
+        async fn do_test_connections(&self) -> Result<ConnectionTestResult> {
+            let status = self.do_get_status().await?;
+            let mut servers = Vec::with_capacity(status.servers.len());
+            for server in status.servers {
+                let address = server.address.clone();
+                let started = std::time::Instant::now();
+                let probe_result = async {
+                    let server_id = address.parse::<ServerId>()?;
+                    self.ensure_server_certificate(server_id).await?;
+                    self.probe_server_connection(server_id).await
+                }
+                .await;
+                let request_time_ms = started.elapsed().as_millis() as u64;
+                let result = match probe_result {
+                    Ok(message) => BuildServerConnectionResult {
+                        address,
+                        success: true,
+                        message,
+                        request_time_ms,
+                    },
+                    Err(err) => BuildServerConnectionResult {
+                        address,
+                        success: false,
+                        message: format!("{err:#}"),
+                        request_time_ms,
+                    },
+                };
+                servers.push(result);
+            }
+            servers.sort_unstable_by(|a, b| a.address.cmp(&b.address));
+            Ok(ConnectionTestResult {
+                num_servers: servers.len(),
+                servers,
+            })
         }
 
         async fn do_submit_toolchain(

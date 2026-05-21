@@ -378,6 +378,19 @@ pub fn request_dist_status(mut conn: ServerConnection) -> Result<DistInfo> {
     }
 }
 
+/// Send a `DistTestConn` request to the server, and return the result if successful.
+pub fn request_dist_test_conn(mut conn: ServerConnection) -> Result<server::DistTestConnInfo> {
+    debug!("request_dist_test_conn");
+    let response = conn
+        .request(Request::DistTestConn)
+        .context("Failed to send data to or receive data from server")?;
+    if let Response::DistTestConn(info) = response {
+        Ok(info)
+    } else {
+        bail!("Unexpected server response!")
+    }
+}
+
 /// Send a `Shutdown` request to the server, and return the `ServerInfo` contained within the response if successful.
 pub fn request_shutdown(mut conn: ServerConnection) -> Result<ServerInfo> {
     debug!("request_shutdown");
@@ -760,6 +773,14 @@ pub fn run_command(cmd: Command) -> Result<i32> {
             let srv = connect_or_start_server(&get_addr(), startup_timeout)?;
             let status =
                 request_dist_status(srv).context("failed to get dist-status from server")?;
+            serde_json::to_writer(&mut io::stdout(), &status)?;
+            println!();
+        }
+        Command::DistTestConn => {
+            trace!("Command::DistTestConn");
+            let srv = connect_or_start_server(&get_addr(), startup_timeout)?;
+            let status = request_dist_test_conn(srv)
+                .context("failed to test distributed build server connectivity")?;
             serde_json::to_writer(&mut io::stdout(), &status)?;
             println!();
         }
