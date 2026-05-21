@@ -46,6 +46,15 @@ pub enum CompileResponse {
     UnsupportedCompiler(OsString),
 }
 
+/// The cache status associated with a finished compile request.
+#[derive(Serialize, Deserialize, Debug)]
+pub enum CompileCacheStatus {
+    Hit,
+    Miss,
+    NotCached,
+    NotCacheable,
+}
+
 /// Information about a finished compile, either from cache or executed locally.
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct CompileFinished {
@@ -59,6 +68,8 @@ pub struct CompileFinished {
     pub stderr: Vec<u8>,
     /// The state of any compiler options passed to control color output.
     pub color_mode: ColorMode,
+    /// The cache status for the compile request, if one applies.
+    pub cache_status: Option<CompileCacheStatus>,
 }
 
 /// The contents of a compile request from a client.

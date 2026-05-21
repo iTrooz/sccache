@@ -24,7 +24,9 @@ use crate::config::Config;
 use crate::dist;
 use crate::jobserver::Client;
 use crate::mock_command::{CommandCreatorSync, ProcessCommandCreator};
-use crate::protocol::{Compile, CompileFinished, CompileResponse, Request, Response};
+use crate::protocol::{
+    Compile, CompileCacheStatus, CompileFinished, CompileResponse, Request, Response,
+};
 use crate::util;
 #[cfg(feature = "dist-client")]
 use anyhow::Context as _;
@@ -1385,6 +1387,7 @@ where
                             CompileResult::CacheHit(duration) => {
                                 debug!("compile result: cache hit");
 
+                                res.cache_status = Some(CompileCacheStatus::Hit);
                                 stats.cache_hits.increment(&kind, &lang);
                                 stats.cache_read_hit_duration += duration;
                             }
@@ -1392,6 +1395,7 @@ where
                                 debug!("[{}]: compile result: cache miss", out_pretty);
                                 dist_type = dt;
 
+                                res.cache_status = Some(CompileCacheStatus::Miss);
                                 match miss_type {
                                     MissType::Normal => {}
                                     MissType::ForcedNoCache => {}
@@ -1414,12 +1418,14 @@ where
                             CompileResult::NotCached(dt, duration) => {
                                 debug!("[{}]: compile result: not cached", out_pretty);
                                 dist_type = dt;
+                                res.cache_status = Some(CompileCacheStatus::NotCached);
                                 stats.compilations += 1;
                                 stats.compiler_write_duration += duration;
                             }
                             CompileResult::NotCacheable(dt, duration) => {
                                 debug!("[{}]: compile result: not cacheable", out_pretty);
                                 dist_type = dt;
+                                res.cache_status = Some(CompileCacheStatus::NotCacheable);
                                 stats.compilations += 1;
                                 stats.compiler_write_duration += duration;
                                 stats.non_cacheable_compilations += 1;
