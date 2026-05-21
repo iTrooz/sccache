@@ -1,5 +1,5 @@
 use crate::compiler::ColorMode;
-use crate::server::{DistInfo, ServerInfo};
+use crate::server::{DistInfo, DistTestConnInfo, ServerInfo};
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 
@@ -12,6 +12,8 @@ pub enum Request {
     GetStats,
     /// Get dist status.
     DistStatus,
+    /// Test connectivity to distributed build servers.
+    DistTestConn,
     /// Shut the server down gracefully.
     Shutdown,
     /// Execute a compile or fetch a cached compilation result.
@@ -29,6 +31,8 @@ pub enum Response {
     Stats(Box<ServerInfo>),
     /// Response for `Request::DistStatus`, containing client info.
     DistStatus(DistInfo),
+    /// Response for `Request::DistTestConn`, containing per-server connection results.
+    DistTestConn(DistTestConnInfo),
     /// Response for `Request::Shutdown`, containing server statistics.
     ShuttingDown(Box<ServerInfo>),
     /// Second response for `Request::Compile`, containing the results of the compilation.

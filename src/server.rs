@@ -200,6 +200,11 @@ impl DistClientContainer {
         DistInfo::Disabled("dist-client feature not selected".to_string())
     }
 
+    /// Report that build server connection testing is unavailable without dist-client.
+    pub async fn test_connections(&self) -> DistTestConnInfo {
+        DistTestConnInfo::Disabled("dist-client feature not selected".to_string())
+    }
+
     async fn get_client(&self) -> Result<Option<Arc<dyn dist::Client>>> {
         Ok(None)
     }
@@ -283,6 +288,39 @@ impl DistClientContainer {
             Err(_) => DistInfo::NotConnected(
                 scheduler_url.clone(),
                 "could not communicate with scheduler".to_string(),
+            ),
+        }
+    }
+
+    /// Test HTTPS connectivity to all scheduler-known build servers.
+    pub async fn test_connections(&self) -> DistTestConnInfo {
+        let mut guard = self.state.lock().await;
+        let state = &mut *guard;
+        let (client, scheduler_url) = match state {
+            DistClientState::Disabled => return DistTestConnInfo::Disabled("disabled".to_string()),
+            DistClientState::FailWithMessage(cfg, _) => {
+                return DistTestConnInfo::NotConnected(
+                    cfg.scheduler_url.clone(),
+                    "enabled, auth not configured".to_string(),
+                );
+            }
+            DistClientState::Some(cfg, client) => (Arc::clone(client), cfg.scheduler_url.clone()),
+            DistClientState::RetryCreateAt(cfg, time) => {
+                return DistTestConnInfo::NotConnected(
+                    cfg.scheduler_url.clone(),
+                    format!(
+                        "enabled, not connected, will retry in {:.1}s",
+                        time.duration_since(Instant::now()).as_secs_f32()
+                    ),
+                );
+            }
+        };
+
+        match client.do_test_connections().await {
+            Ok(res) => DistTestConnInfo::ConnectionResults(scheduler_url.clone(), res),
+            Err(err) => DistTestConnInfo::NotConnected(
+                scheduler_url.clone(),
+                format!("could not communicate with scheduler: {err}"),
             ),
         }
     }
@@ -874,6 +912,13 @@ where
                         .map(Response::DistStatus)
                         .map(Message::WithoutBody)
                 }
+                Request::DistTestConn => {
+                    debug!("handle_client: dist_test_conn");
+                    me.get_dist_test_conn()
+                        .await
+                        .map(Response::DistTestConn)
+                        .map(Message::WithoutBody)
+                }
                 Request::ZeroStats => {
                     debug!("handle_client: zero_stats");
                     me.zero_stats().await;
@@ -1037,6 +1082,11 @@ where
     /// Get dist status.
     async fn get_dist_status(&self) -> Result<DistInfo> {
         Ok(self.dist_client.get_status().await)
+    }
+
+    /// Get distributed build server connection test results.
+    async fn get_dist_test_conn(&self) -> Result<DistTestConnInfo> {
+        Ok(self.dist_client.test_connections().await)
     }
 
     /// Get info and stats about the cache.
@@ -1652,6 +1702,16 @@ pub enum DistInfo {
     NotConnected(Option<config::HTTPUrl>, String),
     #[cfg(feature = "dist-client")]
     SchedulerStatus(Option<config::HTTPUrl>, dist::SchedulerStatusResult),
+}
+
+/// Status of distributed build server connection tests.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum DistTestConnInfo {
+    Disabled(String),
+    #[cfg(feature = "dist-client")]
+    NotConnected(Option<config::HTTPUrl>, String),
+    #[cfg(feature = "dist-client")]
+    ConnectionResults(Option<config::HTTPUrl>, dist::ConnectionTestResult),
 }
 
 impl Default for ServerStats {
