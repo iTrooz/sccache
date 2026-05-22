@@ -1773,8 +1773,10 @@ impl ServerStats {
                 $vec.push(($name.to_string(), $var.all().to_string(), 0));
                 let mut sorted_stats: Vec<_> = $var.counts.iter().collect();
                 sorted_stats.sort_by_key(|v| v.0);
-                for (lang, count) in sorted_stats.iter() {
-                    $vec.push((format!("{} ({})", $name, lang), count.to_string(), 0));
+                if sorted_stats.len() > 1 {
+                    for (lang, count) in sorted_stats.iter() {
+                        $vec.push((format!("{} ({})", $name, lang), count.to_string(), 0));
+                    }
                 }
             }};
         }
@@ -1804,11 +1806,13 @@ impl ServerStats {
         let mut stats_vec = vec![];
         //TODO: this would be nice to replace with a custom derive implementation.
         set_stat!(stats_vec, self.compile_requests, "Compile requests");
-        set_stat!(
-            stats_vec,
-            self.requests_executed,
-            "Compile requests executed"
-        );
+        if advanced {
+            set_stat!(
+                stats_vec,
+                self.requests_executed,
+                "Compile requests executed"
+            );
+        }
         if advanced {
             set_compiler_stat!(stats_vec, self.cache_hits, "Cache hits");
             set_compiler_stat!(stats_vec, self.cache_misses, "Cache misses");
@@ -1819,10 +1823,12 @@ impl ServerStats {
 
         self.set_percentage_stats(&mut stats_vec, advanced);
 
-        set_stat!(stats_vec, self.cache_timeouts, "Cache timeouts");
-        set_stat!(stats_vec, self.cache_read_errors, "Cache read errors");
-        set_stat!(stats_vec, self.forced_recaches, "Forced recaches");
-        set_stat!(stats_vec, self.cache_write_errors, "Cache write errors");
+        if advanced {
+            set_stat!(stats_vec, self.cache_timeouts, "Cache timeouts");
+            set_stat!(stats_vec, self.cache_read_errors, "Cache read errors");
+            set_stat!(stats_vec, self.forced_recaches, "Forced recaches");
+            set_stat!(stats_vec, self.cache_write_errors, "Cache write errors");
+        }
         if advanced {
             set_compiler_stat!(stats_vec, self.cache_errors, "Cache errors");
         } else {
@@ -1847,11 +1853,13 @@ impl ServerStats {
             self.requests_not_compile,
             "Non-compilation calls"
         );
-        set_stat!(
-            stats_vec,
-            self.requests_unsupported_compiler,
-            "Unsupported compiler calls"
-        );
+        if advanced {
+            set_stat!(
+                stats_vec,
+                self.requests_unsupported_compiler,
+                "Unsupported compiler calls"
+            );
+        }
         set_duration_stat!(
             stats_vec,
             self.cache_write_duration,
@@ -1870,11 +1878,13 @@ impl ServerStats {
             self.cache_hits.all(),
             "Average cache read hit"
         );
-        set_stat!(
-            stats_vec,
-            self.dist_errors,
-            "Failed distributed compilations"
-        );
+        if advanced || self.dist_errors > 0 {
+            set_stat!(
+                stats_vec,
+                self.dist_errors,
+                "Failed distributed compilations"
+            );
+        }
 
         // Add multi-level cache statistics if available
         if let Some(ref ml_stats) = self.multi_level {
@@ -1936,12 +1946,9 @@ impl ServerStats {
     }
 
     fn set_percentage_stats(&self, stats_vec: &mut Vec<(String, String, usize)>, advanced: bool) {
-        set_percentage_stat(
-            stats_vec,
-            self.cache_hits.all(),
-            self.cache_misses.all() + self.cache_hits.all(),
-            "Cache hits rate",
-        );
+        let global_hits = self.cache_hits.all();
+        let global_total = self.cache_misses.all() + global_hits;
+        set_percentage_stat(stats_vec, global_hits, global_total, "Cache hits rate");
 
         let (stats_hits, stats_misses): (Vec<_>, Vec<_>) = if advanced {
             (
@@ -1977,10 +1984,19 @@ impl ServerStats {
                 .find(|&&(l, _)| l == lang)
                 .map_or(0, |&(_, &count)| count);
 
+            let lang_total = count_hits + count_misses;
+            if lang_total == 0 {
+                continue;
+            }
+
+            if global_total != 0 && count_hits * global_total == global_hits * lang_total {
+                continue;
+            }
+
             set_percentage_stat(
                 stats_vec,
                 count_hits,
-                count_hits + count_misses,
+                lang_total,
                 &format!("Cache hits rate ({})", lang),
             );
         }
@@ -2048,50 +2064,52 @@ impl ServerInfo {
     /// Print info to stdout in a human-readable format.
     pub fn print(&self, advanced: bool) {
         let (name_width, stat_width) = self.stats.print(&mut StdoutServerStatsWriter, advanced);
-        println!(
-            "{:<name_width$} {}",
-            "Cache location",
-            self.cache_location,
-            name_width = name_width
-        );
-        if let Some(ref ml_stats) = self.stats.multi_level {
-            for level in &ml_stats.0 {
-                println!(
-                    "{:<name_width$} {}",
-                    format!("  {}", level.name),
-                    level.location,
-                    name_width = name_width
-                );
-            }
-        }
-        println!(
-            "{:<name_width$} {}",
-            "Base directories",
-            if self.basedirs.is_empty() {
-                "(none)".to_string()
-            } else {
-                self.basedirs.join(", ")
-            },
-            name_width = name_width
-        );
-        if self.cache_location.starts_with("Local disk") {
+        if advanced {
             println!(
                 "{:<name_width$} {}",
-                "Use direct/preprocessor mode?",
-                if self.use_preprocessor_cache_mode {
-                    "yes"
+                "Cache location",
+                self.cache_location,
+                name_width = name_width
+            );
+            if let Some(ref ml_stats) = self.stats.multi_level {
+                for level in &ml_stats.0 {
+                    println!(
+                        "{:<name_width$} {}",
+                        format!("  {}", level.name),
+                        level.location,
+                        name_width = name_width
+                    );
+                }
+            }
+            println!(
+                "{:<name_width$} {}",
+                "Base directories",
+                if self.basedirs.is_empty() {
+                    "(none)".to_string()
                 } else {
-                    "no"
+                    self.basedirs.join(", ")
                 },
                 name_width = name_width
             );
+            if self.cache_location.starts_with("Local disk") {
+                println!(
+                    "{:<name_width$} {}",
+                    "Use direct/preprocessor mode?",
+                    if self.use_preprocessor_cache_mode {
+                        "yes"
+                    } else {
+                        "no"
+                    },
+                    name_width = name_width
+                );
+            }
+            println!(
+                "{:<name_width$} {}",
+                "Version (client)",
+                self.version,
+                name_width = name_width
+            );
         }
-        println!(
-            "{:<name_width$} {}",
-            "Version (client)",
-            self.version,
-            name_width = name_width
-        );
         for &(name, val) in &[
             ("Cache size", &self.cache_size),
             ("Max cache size", &self.max_cache_size),
@@ -2374,7 +2392,13 @@ mod tests {
 
         let output = writer.get_output();
 
-        assert!(output.contains("Cache hits rate                       -"));
+        assert!(contains_key_and_value(&output, "Cache hits rate", "-"));
+    }
+
+    fn contains_key_and_value(output: &str, key: &str, value: &str) -> bool {
+        output.lines().any(|line| {
+            line.starts_with(&format!("{} ", key)) && line.ends_with(&format!(" {}", value))
+        })
     }
 
     #[test]
@@ -2404,10 +2428,26 @@ mod tests {
 
         let output = writer.get_output();
 
-        assert!(output.contains("Cache hits rate                    46.15 %"));
-        assert!(output.contains("Cache hits rate (C/C++)           100.00 %"));
-        assert!(output.contains("Cache hits rate (Cuda)              0.00 %"));
-        assert!(output.contains("Cache hits rate (Rust)             66.67 %"));
+        assert!(contains_key_and_value(
+            &output,
+            "Cache hits rate",
+            "46.15 %"
+        ));
+        assert!(contains_key_and_value(
+            &output,
+            "Cache hits rate (C/C++)",
+            "100.00 %"
+        ));
+        assert!(contains_key_and_value(
+            &output,
+            "Cache hits rate (Cuda)",
+            "0.00 %"
+        ));
+        assert!(contains_key_and_value(
+            &output,
+            "Cache hits rate (Rust)",
+            "66.67 %"
+        ));
     }
 
     #[test]
@@ -2437,10 +2477,22 @@ mod tests {
 
         let output = writer.get_output();
 
-        assert!(output.contains("Cache hits rate                        -"));
-        assert!(output.contains("Cache hits rate (c/c++ [clang])   100.00 %"));
-        assert!(output.contains("Cache hits rate (cuda)              0.00 %"));
-        assert!(output.contains("Cache hits rate (rust)             33.33 %"));
+        assert!(contains_key_and_value(&output, "Cache hits rate", "-"));
+        assert!(contains_key_and_value(
+            &output,
+            "Cache hits rate (c/c++ [clang])",
+            "100.00 %"
+        ));
+        assert!(contains_key_and_value(
+            &output,
+            "Cache hits rate (cuda)",
+            "0.00 %"
+        ));
+        assert!(contains_key_and_value(
+            &output,
+            "Cache hits rate (rust)",
+            "33.33 %"
+        ));
     }
 
     // Test that 2 servers with the same hits will always be printed in the same order.

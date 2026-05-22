@@ -101,18 +101,18 @@ jobs:
 
       - name: Output
         run: |
-          ${SCCACHE_PATH} --show-stats
+          ${SCCACHE_PATH} --show-adv-stats
 
-          ${SCCACHE_PATH} --show-stats | grep gha
+          ${SCCACHE_PATH} --show-adv-stats | grep gha
 
       - name: Test Twice for Cache Read
         run: cargo clean && cargo build
 
       - name: Output
         run: |
-          ${SCCACHE_PATH} --show-stats
+          ${SCCACHE_PATH} --show-adv-stats
 
-          ${SCCACHE_PATH} --show-stats | grep -e "Cache hits\s*[1-9]"
+          ${SCCACHE_PATH} --show-adv-stats | grep -e "Cache hits\s*[1-9]"
 
   test-mock-msvc:
     runs-on: windows-2022
@@ -154,8 +154,8 @@ jobs:
         run: |
           rm ./foo.o || true
           $SCCACHE_EXE "$(where cl.exe)" -c "@args.rsp"
-          $SCCACHE_EXE --show-stats
-          $SCCACHE_EXE --show-stats | grep -e "Cache misses\s*[1-9]"
+          $SCCACHE_EXE --show-adv-stats
+          $SCCACHE_EXE --show-adv-stats | grep -e "Cache misses\s*[1-9]"
           test -e ./foo.o || { echo "No compiler output found"; exit -1; }
           test -e ./foo.o.json || { echo "No dependency list found"; exit -1; }
 
@@ -165,8 +165,8 @@ jobs:
         run: |
           rm ./foo.o || true
           $SCCACHE_EXE "$(where cl.exe)" -c "@args.rsp"
-          $SCCACHE_EXE --show-stats
-          $SCCACHE_EXE --show-stats | grep -e "Cache hits\s*[1-9]"
+          $SCCACHE_EXE --show-adv-stats
+          $SCCACHE_EXE --show-adv-stats | grep -e "Cache hits\s*[1-9]"
           test -e ./foo.o || { echo "No compiler output found"; exit -1; }
           test -e ./foo.o.json || { echo "No dependency list found"; exit -1; }
 
@@ -175,7 +175,7 @@ jobs:
         working-directory: ./tests/integration/msvc-preprocessing
         run: |
           $SCCACHE_EXE "$(where cl.exe)" -c "@args.rsp"
-          $SCCACHE_EXE --show-stats
+          $SCCACHE_EXE --show-adv-stats
 
       - name: Prepare - MSBuild support
         shell: bash
@@ -278,7 +278,7 @@ jobs:
       - name: Output
         run: |
           export LD_PRELOAD=$PWD/target/debug/librandomize_readdir.so
-          ${SCCACHE_PATH} --show-stats
+          ${SCCACHE_PATH} --show-adv-stats
 
       - name: Test Twice for Cache Read
         run: |
@@ -295,8 +295,8 @@ jobs:
       - name: Output
         run: |
           export LD_PRELOAD=$PWD/target/debug/librandomize_readdir.so
-          ${SCCACHE_PATH} --show-stats
-          ${SCCACHE_PATH} --show-stats | grep -e "Cache hits\s*[1-9]"
+          ${SCCACHE_PATH} --show-adv-stats
+          ${SCCACHE_PATH} --show-adv-stats | grep -e "Cache hits\s*[1-9]"
 
   xcode:
     runs-on: macos-latest
@@ -326,7 +326,7 @@ jobs:
 
       - name: Output
         run: |
-          ${SCCACHE_PATH} --show-stats
+          ${SCCACHE_PATH} --show-adv-stats
 
       - name: Test compile xcode cached
         working-directory: tests/integration/xcode
@@ -336,5 +336,5 @@ jobs:
 
       - name: Output
         run: |
-          ${SCCACHE_PATH} --show-stats
-          ${SCCACHE_PATH} --show-stats | grep -e "Cache hits\s*[1-9]"
+          ${SCCACHE_PATH} --show-adv-stats
+          ${SCCACHE_PATH} --show-adv-stats | grep -e "Cache hits\s*[1-9]"
