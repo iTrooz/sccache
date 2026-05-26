@@ -4,6 +4,8 @@ This branch (main) is a soft-fork of https://github.com/mozilla/sccache , adding
 
 A container image is available at ghcr.io/itrooz/sccache:custom. See https://github.com/iTrooz/sccache-deploy for more information.
 
+This fork will be rebased on https://github.com/mozilla/sccache every 3 months at minimum.
+
 # Original README
 
 [![Build Status](https://github.com/mozilla/sccache/workflows/ci/badge.svg)](https://github.com/mozilla/sccache/actions?query=workflow%3Aci)
