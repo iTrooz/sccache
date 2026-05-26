@@ -57,6 +57,7 @@ pub fn start_local_daemon(cfg_path: &Path, cached_cfg_path: &Path) {
         // )
         .env("SCCACHE_CONF", cfg_path)
         .env("SCCACHE_CACHED_CONF", cached_cfg_path)
+        .env("SCCACHE_PERSIST_STATS", "false")
         .status()
         .unwrap()
         .success()
