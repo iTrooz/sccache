@@ -65,7 +65,7 @@ use tokio::sync::RwLock;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     runtime::Runtime,
-    time::{self, Sleep, sleep},
+    time::{Sleep, sleep},
 };
 use tokio_serde::Framed;
 use tokio_util::codec::{LengthDelimitedCodec, length_delimited};
@@ -101,6 +101,55 @@ fn get_idle_timeout() -> u64 {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_IDLE_TIMEOUT)
+}
+/// Build the shutdown future that resolves on process termination signals.
+pub async fn make_signal_shutdown_future() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+
+        let mut sigint = match signal(SignalKind::interrupt()) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                warn!("failed to install SIGINT handler: {e}");
+                None
+            }
+        };
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                warn!("failed to install SIGTERM handler: {e}");
+                None
+            }
+        };
+
+        if sigint.is_none() && sigterm.is_none() {
+            future::pending::<()>().await;
+            return;
+        }
+
+        tokio::select! {
+            _ = async {
+                if let Some(sigint) = sigint.as_mut() {
+                    let _ = sigint.recv().await;
+                } else {
+                    future::pending::<()>().await;
+                }
+            } => {}
+            _ = async {
+                if let Some(sigterm) = sigterm.as_mut() {
+                    let _ = sigterm.recv().await;
+                } else {
+                    future::pending::<()>().await;
+                }
+            } => {}
+        }
+    }
+    #[cfg(not(unix))]
+    if let Err(e) = tokio::signal::ctrl_c().await {
+        warn!("failed to listen for Ctrl+C: {e}");
+        future::pending::<()>().await;
+    }
 }
 
 fn notify_server_startup_internal<W: Write>(mut w: W, status: ServerStartup) -> Result<()> {
@@ -580,7 +629,8 @@ pub fn start_server(config: &Config, addr: &crate::net::SocketAddr) -> Result<()
                     addr: addr.to_string(),
                 },
             )?;
-            run(future::pending::<()>()).map_err(anyhow::Error::from)?;
+            let shutdown = make_signal_shutdown_future();
+            run(shutdown).map_err(anyhow::Error::from)?;
             Ok(())
         }
         Err(e) => {
@@ -776,7 +826,27 @@ impl<A: crate::net::Acceptor, C: CommandCreatorSync> SccacheServer<A, C> {
         //
         // Note that we cap the amount of time this can take, however, as we
         // don't want to wait *too* long.
-        runtime.block_on(async { time::timeout(SHUTDOWN_TIMEOUT, wait).await })?;
+        match runtime.block_on(async {
+            tokio::select! {
+                _ = wait => 0_u8,
+                _ = sleep(SHUTDOWN_TIMEOUT) => 1_u8,
+                _ = make_signal_shutdown_future() => 2_u8,
+            }
+        }) {
+            0 => {}
+            1 => {
+                warn!(
+                    "shutdown wait timed out after {} seconds; forcing exit",
+                    SHUTDOWN_TIMEOUT.as_secs()
+                );
+            }
+            2 => {
+                warn!(
+                    "received a second termination signal during graceful shutdown; forcing exit"
+                );
+            }
+            _ => unreachable!(),
+        }
 
         info!("ok, fully shutting down now");
 
