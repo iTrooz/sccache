@@ -9,7 +9,7 @@ use std::fs::remove_dir_all;
 use std::io::Write;
 use std::net::{self, IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Command, ExitStatus, Output, Stdio};
 use std::str::{self, FromStr};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -40,6 +40,7 @@ const CONFIGS_CONTAINER_PATH: &str = "/sccache-bits";
 const BUILD_DIR_CONTAINER_PATH: &str = "/sccache-bits/build-dir";
 const SCHEDULER_PORT: u16 = 10500;
 const SERVER_PORT: u16 = 12345; // arbitrary
+const STOP_SERVER_NOT_RUNNING_STATUS_CODE: i32 = 3;
 
 const TC_CACHE_SIZE: u64 = 1024 * 1024 * 1024; // 1 gig
 
@@ -66,14 +67,21 @@ pub fn start_local_daemon(cfg_path: &Path, cached_cfg_path: &Path) {
     }
 }
 
-pub fn stop_local_daemon() -> bool {
+pub fn maybe_stop_local_daemon() -> ExitStatus {
     trace!("sccache --stop-server");
-    sccache_command()
-        .arg("--stop-server")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
+    sccache_command().arg("--stop-server").status().unwrap()
+}
+
+/// Ensure daemon is stopped, panic if there was an error
+pub fn stop_local_daemon() -> bool {
+    let status = maybe_stop_local_daemon();
+    if status.success() {
+        return true;
+    }
+    if status.code() == Some(STOP_SERVER_NOT_RUNNING_STATUS_CODE) {
+        return false;
+    }
+    panic!("Failed to stop local daemon: {status}");
 }
 
 pub fn clear_cache_local_daemon(tmpdir: &Path) -> bool {

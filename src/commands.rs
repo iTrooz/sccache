@@ -48,6 +48,9 @@ pub const DEFAULT_PORT: u16 = 4226;
 /// The number of milliseconds to wait for server startup.
 const SERVER_STARTUP_TIMEOUT: Duration = Duration::from_millis(10000);
 
+/// Exit code returned by `--stop-server` when there is no running server.
+const STOP_SERVER_NOT_RUNNING_STATUS_CODE: i32 = 3;
+
 /// Get the port on which the server should listen.
 fn get_addr() -> crate::net::SocketAddr {
     #[cfg(unix)]
@@ -702,7 +705,14 @@ pub fn run_command(cmd: Command) -> Result<i32> {
         Command::StopServer => {
             trace!("Command::StopServer");
             println!("Stopping sccache server...");
-            let server = connect_to_server(&get_addr()).context("couldn't connect to server")?;
+            let server = match connect_to_server(&get_addr()) {
+                Ok(server) => server,
+                Err(e) if e.kind() == io::ErrorKind::ConnectionRefused => {
+                    println!("sccache: Server is not running");
+                    return Ok(STOP_SERVER_NOT_RUNNING_STATUS_CODE);
+                }
+                Err(e) => return Err(e).context("couldn't connect to server"),
+            };
             let stats = request_shutdown(server)?;
             stats.print(false);
         }

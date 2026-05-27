@@ -3399,8 +3399,8 @@ mod test_dist {
     use crate::dist::pkg;
     use crate::dist::{
         self, AllocJobResult, CompileCommand, ConnectionTestResult, JobAlloc, JobComplete, JobId,
-        OutputData, PathTransformer, ProcessOutput, RunJobResult, SchedulerStatusResult,
-        ServerId, SubmitToolchainResult, Toolchain,
+        OutputData, PathTransformer, ProcessOutput, RunJobResult, SchedulerStatusResult, ServerId,
+        SubmitToolchainResult, Toolchain,
     };
     use async_trait::async_trait;
     use std::path::{Path, PathBuf};
