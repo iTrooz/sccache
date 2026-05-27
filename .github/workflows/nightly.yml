@@ -1,0 +1,51 @@
+name: Nightly Release
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Release
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: sccache-*
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rename and prepare assets
+        run: |
+          mkdir -p dist
+          for dir in sccache-*/; do
+            [[ "$dir" == sccache-dist-* ]] && continue
+            name="${dir%/}"
+            cp "$dir"/sccache* "dist/$name"
+          done
+          ls -la dist/
+
+      - name: Clear existing assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view nightly --json assets --jq '.assets[].name' | \
+          while read asset; do
+            gh release delete-asset nightly "$asset" --yes
+          done
+
+      - name: Upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release upload nightly ./dist/sccache-* --clobber

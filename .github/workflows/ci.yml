@@ -322,18 +322,10 @@ jobs:
           RUSTFLAGS: ${{ env.RUSTFLAGS || matrix.rustflags }}
           CARGO_PROFILE_RELEASE_LTO: ${{ matrix.lto || 'true' }}
 
-      # Workaround for the lack of substring() function in github actions expressions.
-      - name: Id
-        id: id
-        shell: bash
-        run: echo "id=${ID#refs/tags/}" >> $GITHUB_OUTPUT
-        env:
-          ID: ${{ startsWith(github.ref, 'refs/tags/') && github.ref || github.sha }}
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.binary || 'sccache' }}-${{ steps.id.outputs.id }}-${{ matrix.target }}
+          name: ${{ matrix.binary || 'sccache' }}-${{ matrix.target }}${{ endsWith(matrix.target, '-msvc') && '.exe' || '' }}
           path: target/${{ matrix.target }}/release/${{ matrix.binary || 'sccache' }}${{ endsWith(matrix.target, '-msvc') && '.exe' || '' }}
           if-no-files-found: error
 
