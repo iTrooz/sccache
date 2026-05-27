@@ -60,6 +60,8 @@ pub enum Command {
     StartServer,
     /// Stop background server.
     StopServer,
+    /// Install compiler symlinks next to the current sccache binary.
+    InstallBins(PathBuf),
     /// Zero cache statistics and exit.
     ZeroStats,
     /// Show the status of the distributed client.
@@ -143,6 +145,11 @@ fn get_clap_command() -> clap::Command {
             flag_infer_long("stop-server")
                 .help("stop background server")
                 .action(ArgAction::SetTrue),
+            flag_infer_long("install-bins")
+                .help("install compiler symlinks to a specific directory")
+                .num_args(1)
+                .value_name("DIR")
+                .value_parser(clap::value_parser!(PathBuf)),
             flag_infer_long_and_short("zero-stats")
                 .help("zero statistics counters")
                 .action(ArgAction::SetTrue),
@@ -181,6 +188,7 @@ fn get_clap_command() -> clap::Command {
                     "show-adv-stats",
                     "start-server",
                     "stop-server",
+                    "install-bins",
                     "zero-stats",
                     "package-toolchain",
                     "CMD",
@@ -283,6 +291,8 @@ pub fn try_parse() -> Result<Command> {
                 Ok(Command::DebugPreprocessorCacheEntries)
             } else if matches.get_flag("stop-server") {
                 Ok(Command::StopServer)
+            } else if let Some(dir) = matches.get_one::<PathBuf>("install-bins") {
+                Ok(Command::InstallBins(dir.clone()))
             } else if matches.get_flag("zero-stats") {
                 Ok(Command::ZeroStats)
             } else if matches.get_flag("dist-auth") {

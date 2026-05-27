@@ -31,14 +31,14 @@ use std::ffi::{OsStr, OsString};
 use std::io::{self, IsTerminal, Write};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
 use std::time::Duration;
 use strip_ansi_escapes::Writer;
 use tokio::io::AsyncReadExt;
 use tokio::runtime::Runtime;
 use walkdir::WalkDir;
-use which::which_in;
+use which::{which, which_in};
 
 use crate::errors::*;
 
@@ -50,6 +50,11 @@ const SERVER_STARTUP_TIMEOUT: Duration = Duration::from_millis(10000);
 
 /// Exit code returned by `--stop-server` when there is no running server.
 const STOP_SERVER_NOT_RUNNING_STATUS_CODE: i32 = 3;
+
+const INSTALL_BIN_LINKS: &[&str] = &[
+    "cc", "c++", "gcc", "g++", "clang", "clang++", "clang-cl", "cl", "nvcc", "nvc", "nvc++",
+    "hipcc", "diab",
+];
 
 /// Get the port on which the server should listen.
 fn get_addr() -> crate::net::SocketAddr {
@@ -603,6 +608,79 @@ where
     }))
 }
 
+/// Resolve the canonical path to the current sccache binary.
+fn current_sccache_binary_path() -> Result<PathBuf> {
+    let exe_path =
+        env::current_exe().context("failed to determine path of current sccache binary")?;
+    Ok(exe_path.canonicalize().unwrap_or(exe_path))
+}
+
+/// Create a symlink pointing to the current sccache binary.
+#[cfg(unix)]
+fn create_compiler_symlink(target: &Path, link: &Path) -> Result<()> {
+    std::os::unix::fs::symlink(target, link)?;
+    Ok(())
+}
+
+/// Create a symlink pointing to the current sccache binary.
+#[cfg(windows)]
+fn create_compiler_symlink(target: &Path, link: &Path) -> Result<()> {
+    std::os::windows::fs::symlink_file(target, link)?;
+    Ok(())
+}
+
+/// Install compiler symlinks next to the current sccache binary.
+fn install_compiler_symlinks(install_dir: &Path) -> Result<()> {
+    let target = current_sccache_binary_path()?;
+
+    let mut installed = 0usize;
+    let mut skipped = 0usize;
+
+    for bin in INSTALL_BIN_LINKS {
+        if which(bin).is_err() {
+            continue;
+        }
+        let link = install_dir.join(bin);
+        match fs::symlink_metadata(&link) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() {
+                    let link_target = fs::read_link(&link)?;
+                    let resolved_target = if link_target.is_absolute() {
+                        link_target
+                    } else {
+                        install_dir.join(link_target)
+                    };
+                    let resolved_target = resolved_target
+                        .canonicalize()
+                        .unwrap_or_else(|_| resolved_target.clone());
+                    if resolved_target == target {
+                        skipped += 1;
+                        continue;
+                    }
+                }
+                bail!("refusing to overwrite existing path: {}", link.display());
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                create_compiler_symlink(&target, &link)
+                    .with_context(|| format!("failed to create symlink at {}", link.display()))?;
+                println!("sccache: installed {}", link.display());
+                installed += 1;
+            }
+            Err(e) => {
+                return Err(e).with_context(|| {
+                    format!("failed to inspect existing path {}", link.display())
+                });
+            }
+        }
+    }
+
+    println!(
+        "sccache: install-bins complete (installed: {}, already linked: {})",
+        installed, skipped
+    );
+    Ok(())
+}
+
 /// Send a `Compile` request to the sccache server `conn`, and handle the response.
 ///
 /// The first entry in `cmdline` will be looked up in `path` if it is not
@@ -715,6 +793,10 @@ pub fn run_command(cmd: Command) -> Result<i32> {
             };
             let stats = request_shutdown(server)?;
             stats.print(false);
+        }
+        Command::InstallBins(dir) => {
+            trace!("Command::InstallBins");
+            install_compiler_symlinks(&dir)?;
         }
         Command::ZeroStats => {
             trace!("Command::ZeroStats");

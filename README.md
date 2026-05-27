@@ -158,6 +158,14 @@ Running sccache is like running ccache: prefix your compilation commands with it
 sccache gcc -o foo.o -c foo.c
 ```
 
+You can also install ccache-style compiler symlinks next to the current `sccache` binary:
+
+```bash
+sccache --install-bins
+```
+
+This creates symlinks for common compiler names (for example `cc`, `gcc`, `g++`, `clang`, `clang++`, `nvcc`, `hipcc`) that point to the current `sccache` executable.
+
 If you want to use sccache for caching Rust builds you can define `build.rustc-wrapper` in the
 [cargo configuration file](https://doc.rust-lang.org/cargo/reference/config.html).  For example, you can set it globally
 in `$HOME/.cargo/config.toml` by adding:
