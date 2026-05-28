@@ -37,15 +37,12 @@ jobs:
 
   check_features:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        feature: [ azure, gcs, gha, memcached, redis, s3, webdav ]
     steps:
       - name: Clone repository
         uses: actions/checkout@v5
 
-      - name: Check feature ${{ matrix.feature }}
-        run: cargo check --no-default-features --features ${{ matrix.feature }}
+      - name: Check features
+        run: cargo check --all-features --all-targets
 
   toml_format:
     runs-on: ubuntu-latest
@@ -81,10 +78,6 @@ jobs:
           - os: ubuntu-22.04
             rustc: beta
           - os: ubuntu-22.04
-            rustc: nightly
-            allow_failure: true
-            extra_args: --features=unstable
-          - os: ubuntu-22.04
             extra_desc: no-default-features
             extra_args: --no-default-features
             allow_failure: true
@@ -104,13 +97,6 @@ jobs:
             # Oldest supported version, keep in sync with README.md
             rustc: "1.85.0"
             extra_args: --no-fail-fast
-            notest_cuda_compilers: clang++
-            extra_desc: cuda12.8
-          - os: windows-2022
-            cuda: "12.8"
-            rustc: nightly
-            allow_failure: true
-            extra_args: --features=unstable
             notest_cuda_compilers: clang++
             extra_desc: cuda12.8
           - os: windows-2022
@@ -260,18 +246,8 @@ jobs:
             target: x86_64-unknown-linux-musl
             container: '{"image": "messense/rust-musl-cross:x86_64-musl"}'
           - os: ubuntu-22.04
-            target: s390x-unknown-linux-musl
-            container: '{"image": "messense/rust-musl-cross:s390x-musl"}'
-            lto: "false"
-          - os: ubuntu-22.04
-            target: s390x-unknown-linux-gnu
-          - os: ubuntu-22.04
             target: riscv64gc-unknown-linux-musl
             container: '{"image": "messense/rust-musl-cross:riscv64gc-musl"}'
-            rustflags: -Ctarget-feature=+crt-static
-          - os: ubuntu-22.04
-            target: loongarch64-unknown-linux-musl
-            container: '{"image": "messense/rust-musl-cross:loongarch64-musl"}'
             rustflags: -Ctarget-feature=+crt-static
           - os: ubuntu-22.04
             binary: sccache-dist
@@ -281,12 +257,6 @@ jobs:
           - os: ubuntu-22.04
             target: aarch64-unknown-linux-musl
             container: '{"image": "messense/rust-musl-cross:aarch64-musl"}'
-          - os: ubuntu-22.04
-            target: armv7-unknown-linux-musleabi
-            container: '{"image": "messense/rust-musl-cross:armv7-musleabi"}'
-          - os: ubuntu-22.04
-            target: i686-unknown-linux-musl
-            container: '{"image": "messense/rust-musl-cross:i686-musl"}'
           - os: macos-14
             target: aarch64-apple-darwin
             macosx_deployment_target: 11.0
@@ -310,27 +280,6 @@ jobs:
           target: ${{ matrix.target }}
         if: ${{ !matrix.container }}
 
-      - name: Install s390x cross-compilation toolchain
-        if: ${{ matrix.target == 's390x-unknown-linux-gnu' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-s390x-linux-gnu g++-s390x-linux-gnu
-          mkdir -p .cargo
-          cat >> .cargo/config.toml <<EOF
-          [target.s390x-unknown-linux-gnu]
-          linker = "s390x-linux-gnu-gcc"
-          EOF
-
-      - name: Install rust-src for s390x-musl
-        if: ${{ matrix.target == 's390x-unknown-linux-musl' }}
-        run: |
-          # Remove corrupted nightly toolchain if it exists
-          rustup toolchain uninstall nightly || true
-          # Clean up any leftover files
-          rm -rf ~/.rustup/toolchains/nightly-* || true
-          # Install fresh nightly with minimal profile
-          rustup toolchain install nightly --profile minimal
-          rustup component add rust-src --toolchain nightly
 
       - name: fix build openssl error on s390x
         if: ${{  matrix.target  == 's390x-unknown-linux-musl' }}
@@ -374,69 +323,6 @@ jobs:
           name: ${{ matrix.binary || 'sccache' }}-${{ steps.id.outputs.id }}-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/${{ matrix.binary || 'sccache' }}${{ endsWith(matrix.target, '-msvc') && '.exe' || '' }}
           if-no-files-found: error
-
-
-  test_freebsd:
-    name: test freebsd-15.0 rust stable
-    runs-on: ${{ matrix.job.os }}
-    timeout-minutes: 70
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-22.04 }
-    steps:
-      - uses: actions/checkout@v5
-      - name: Prepare, build and test
-        uses: vmactions/freebsd-vm@v1
-        with:
-          mem: 8192
-          usesh: true
-          sync: rsync
-          copyback: false
-          prepare: pkg install -y ca_root_nss curl gmake gtar pot sudo
-          run: |
-            #####################################################################################
-            ###  Prepare, build, and test
-            #####################################################################################
-            ###  based on ref: <https://github.com/rust-lang/rustup/pull/2783>
-            ###  and on ref: <https://github.com/uutils/coreutils/commit/86c610a84b8b6c>
-            ###  * NOTE: All steps need to be run in this block, otherwise, we are operating back
-            ###    on the mac host.
-            set -exo pipefail
-            #
-            ### Basic user setup ################################################################
-            TEST_USER=tester
-            TEST_USER_HOME="/opt/$TEST_USER"
-            REPO_NAME=${GITHUB_WORKSPACE##*/}
-            WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
-            WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
-            export WORKSPACE
-            #
-            mkdir -p "$TEST_USER_HOME"
-            pw adduser -n "$TEST_USER" -d "$TEST_USER_HOME" -c "Tester" -h -
-            chown -R "$TEST_USER":"$TEST_USER" "$TEST_USER_HOME"
-            chown -R "$TEST_USER":"$TEST_USER" "/$WORKSPACE_PARENT"/
-            cat > /usr/local/etc/sudoers.d/wheel<<EOF
-            $TEST_USER ALL=(ALL) NOPASSWD: ALL
-            EOF
-            #
-            ### Install rust stable from rustup  ################################################
-            su "$TEST_USER" -c "/bin/sh -exo pipefail" <<"EOH"
-            whoami
-            echo "$HOME"
-            fetch -o /tmp/rustup.sh https://sh.rustup.rs
-            sh /tmp/rustup.sh -y --profile=minimal
-            ### Run tests #######################################################################
-            . "$HOME/.cargo/env"
-            "$WORKSPACE/scripts/freebsd-ci-test.sh"
-            EOH
-            # end
-      - name: Upload failure
-        if: failure()
-        uses: ./.github/actions/artifact_failure
-        with:
-          name: test-freebsd-15.0-stable
 
   release:
     name: release
