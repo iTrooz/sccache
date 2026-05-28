@@ -67,6 +67,7 @@ where
     T: Into<Option<ServerOptions>> + Send + 'static,
 {
     let options = options.into();
+    unsafe { std::env::set_var("SCCACHE_PERSIST_STATS", "false") };
     let cache_dir = cache_dir.to_path_buf();
 
     let cache_size = options

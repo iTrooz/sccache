@@ -52,7 +52,7 @@ use std::mem;
 use std::os::android::net::SocketAddrExt;
 #[cfg(target_os = "linux")]
 use std::os::linux::net::SocketAddrExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{ExitStatus, Output};
 use std::sync::Arc;
@@ -102,6 +102,75 @@ fn get_idle_timeout() -> u64 {
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_IDLE_TIMEOUT)
 }
+
+/// Return the on-disk path used for persisted server statistics.
+fn stats_file_path() -> PathBuf {
+    crate::config::default_disk_other_dir().join("stats.json")
+}
+
+fn persist_stats_enabled() -> bool {
+    match std::env::var("SCCACHE_PERSIST_STATS") {
+        Ok(val) => val != "false",
+        Err(_) => true,
+    }
+}
+
+/// Load persisted server statistics, defaulting on missing or invalid data.
+fn load_server_stats_from_disk(path: &Path) -> ServerStats {
+    if !persist_stats_enabled() {
+        return ServerStats::default();
+    }
+    match fs::read(path) {
+        Ok(bytes) => match serde_json::from_slice(&bytes) {
+            Ok(stats) => {
+                info!("loaded persisted server stats from {}", path.display());
+                trace!("persisted server stats: {:?}", stats);
+                stats
+            }
+            Err(err) => {
+                warn!(
+                    "failed to deserialize persisted server stats at {}: {}",
+                    path.display(),
+                    err
+                );
+                ServerStats::default()
+            }
+        },
+        Err(err) => {
+            if err.kind() != io::ErrorKind::NotFound {
+                warn!(
+                    "failed to read persisted server stats at {}: {}",
+                    path.display(),
+                    err
+                );
+            }
+            ServerStats::default()
+        }
+    }
+}
+
+/// Persist server statistics atomically to disk as JSON.
+fn save_server_stats_to_disk(path: &Path, stats: &ServerStats) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut temp_path = path.to_path_buf();
+    temp_path.set_extension(format!("json.tmp.{}", std::process::id()));
+
+    let bytes = serde_json::to_vec(stats)?;
+    fs::write(&temp_path, bytes)?;
+
+    if let Err(err) = fs::rename(&temp_path, path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(err.into());
+    }
+
+    info!("saved server stats to {}", path.display());
+
+    Ok(())
+}
+
 /// Build the shutdown future that resolves on process termination signals.
 pub async fn make_signal_shutdown_future() {
     #[cfg(unix)]
@@ -757,6 +826,11 @@ impl<A: crate::net::Acceptor, C: CommandCreatorSync> SccacheServer<A, C> {
             wait,
         } = self;
 
+        let stats_for_shutdown = {
+            let service = service.clone();
+            service.stats.clone()
+        };
+
         // Create our "server future" which will simply handle all incoming
         // connections in separate tasks.
         let server = async move {
@@ -846,6 +920,18 @@ impl<A: crate::net::Acceptor, C: CommandCreatorSync> SccacheServer<A, C> {
                 );
             }
             _ => unreachable!(),
+        }
+
+        if persist_stats_enabled() {
+            let snapshot = stats_for_shutdown.blocking_lock().clone();
+            let stats_path = stats_file_path();
+            if let Err(err) = save_server_stats_to_disk(&stats_path, &snapshot) {
+                warn!(
+                    "failed to persist server stats at {}: {}",
+                    stats_path.display(),
+                    err
+                );
+            }
         }
 
         info!("ok, fully shutting down now");
@@ -1033,8 +1119,10 @@ where
         tx: mpsc::Sender<ServerMessage>,
         info: ActiveInfo,
     ) -> SccacheService<C> {
+        let stats = Arc::new(Mutex::new(load_server_stats_from_disk(&stats_file_path())));
+
         SccacheService {
-            stats: Arc::default(),
+            stats,
             dist_client: Arc::new(dist_client),
             storage,
             compilers: Arc::default(),

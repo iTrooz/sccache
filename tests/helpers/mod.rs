@@ -67,6 +67,7 @@ impl SccacheTest<'_> {
         Command::new(SCCACHE_BIN.as_os_str())
             .arg("--start-server")
             .env("SCCACHE_DIR", &cache_dir)
+            .env("SCCACHE_PERSIST_STATS", "false")
             .assert()
             .try_success()
             .context("Failed to start sccache server")?;

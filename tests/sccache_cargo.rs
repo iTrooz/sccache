@@ -201,6 +201,7 @@ fn restart_sccache(
     let mut cmd = Command::new(SCCACHE_BIN.as_os_str());
     cmd.arg("--start-server");
     cmd.env("SCCACHE_DIR", &cache_dir);
+    cmd.env("SCCACHE_PERSIST_STATS", "false");
 
     if let Some(additional_envs) = additional_envs {
         cmd.envs(additional_envs);

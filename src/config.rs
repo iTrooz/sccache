@@ -105,7 +105,14 @@ pub fn default_disk_cache_dir() -> PathBuf {
         .cache_dir()
         .to_owned()
 }
-// ...whereas subdirectories are used of this one
+
+// ...so other files are stored in ./other/
+/// Returns the dedicated cache subdirectory for other files.
+pub fn default_disk_other_dir() -> PathBuf {
+    default_disk_cache_dir().join("other")
+}
+
+// subdirectories are used of this one
 pub fn default_dist_cache_dir() -> PathBuf {
     ProjectDirs::from("", ORGANIZATION, DIST_APP_NAME)
         .expect("Unable to retrieve dist cache directory")
