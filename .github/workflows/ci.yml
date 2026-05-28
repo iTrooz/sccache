@@ -28,6 +28,10 @@ jobs:
           # Oldest supported version, keep in sync with README.md
           toolchain: "1.85.0"
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.component }}
+
       - name: clippy version
         run: cargo clippy --version
         if: ${{ matrix.component == 'clippy' }}
@@ -40,6 +44,8 @@ jobs:
     steps:
       - name: Clone repository
         uses: actions/checkout@v5
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Check features
         run: cargo check --all-features --all-targets
@@ -126,6 +132,10 @@ jobs:
         with:
           toolchain: ${{ matrix.rustc }}
           components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.extra_args }}-${{ matrix.rustc || 'stable' }}
 
       - if: ${{ contains(matrix.os, 'ubuntu') }}
         name: Install gcc & clang for tests
@@ -280,6 +290,9 @@ jobs:
           target: ${{ matrix.target }}
         if: ${{ !matrix.container }}
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
       - name: fix build openssl error on s390x
         if: ${{  matrix.target  == 's390x-unknown-linux-musl' }}
