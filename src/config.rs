@@ -1215,6 +1215,25 @@ fn config_file(env_var: &str, leaf: &str) -> PathBuf {
     dirs.config_dir().join(leaf)
 }
 
+fn global_config_file() -> PathBuf {
+    #[cfg(target_os = "linux")]
+    {
+        PathBuf::from("/etc/sccache/config")
+    }
+    #[cfg(target_os = "macos")]
+    {
+        PathBuf::from("/Library/Preferences/sccache/config")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        PathBuf::from("C:\\ProgramData\\sccache\\config")
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        PathBuf::from("/etc/sccache/config")
+    }
+}
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Config {
     pub cache: Option<CacheType>,
@@ -1232,6 +1251,28 @@ impl Config {
         let env_conf = config_from_env()?;
 
         let file_conf_path = config_file("SCCACHE_CONF", "config");
+        let file_conf_path = if env::var_os("SCCACHE_CONF").is_some() {
+            trace!("Using config file from SCCACHE_CONF: {:?}", file_conf_path);
+            file_conf_path
+        } else if file_conf_path.exists() {
+            file_conf_path
+        } else {
+            trace!(
+                "No user config file found at {:?}; checking global config location",
+                file_conf_path
+            );
+            let global_path = global_config_file();
+            if global_path.exists() {
+                global_path
+            } else {
+                trace!(
+                    "No config file found (neither {:?} nor {:?}); using default config",
+                    file_conf_path, global_path
+                );
+                file_conf_path
+            }
+        };
+
         let file_conf = try_read_config_file(&file_conf_path)
             .context("Failed to load config file")?
             .unwrap_or_default();

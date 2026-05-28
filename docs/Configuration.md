@@ -150,10 +150,15 @@ key_prefix = "cosprefix"
 
 sccache looks for its configuration file at the path indicated by env variable `SCCACHE_CONF`.
 
-If no such env variable is set, sccache looks at default locations as below:
-- Linux: `~/.config/sccache/config`
-- macOS: `~/Library/Application Support/Mozilla.sccache/config`
-- Windows: `%APPDATA%\Mozilla\sccache\config\config`
+If no such env variable is set, sccache looks at default locations in this order:
+1. User config file:
+   - Linux: `~/.config/sccache/config`
+   - macOS: `~/Library/Application Support/Mozilla.sccache/config`
+   - Windows: `%APPDATA%\Mozilla\sccache\config\config`
+2. Global config file (fallback if user config does not exist):
+   - Linux: `/etc/sccache/config`
+   - macOS: `/Library/Preferences/sccache/config`
+   - Windows: `C:\ProgramData\sccache\config`
 
 The latest `cache.XXX` entries may be found here: https://github.com/mozilla/sccache/blob/ffe3070f77ef3301c8ff718316e4ab017ec83042/src/config.rs#L300.
 
