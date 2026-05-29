@@ -873,6 +873,23 @@ where
         .generate_compile_commands(&mut path_transformer, rewrite_includes_only)
         .context("Failed to generate compile commands")?;
 
+    let compile_args = compile_cmd.get_arguments();
+
+    if dist_client
+        .as_ref()
+        .is_some_and(|c| c.try_skip_trivial_dist())
+        && crate::util::is_trivial_compilation(&compile_args)
+    {
+        debug!(
+            "[{}]: Skipping dist because trivial compilation detected)",
+            out_pretty
+        );
+        return compile_cmd
+            .execute(service, &creator)
+            .await
+            .map(move |o| (cacheable, DistType::NoDist, o));
+    }
+
     let dist_client = match dist_compile_cmd.clone().and(dist_client) {
         Some(dc) => dc,
         None => {

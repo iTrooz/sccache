@@ -1297,6 +1297,12 @@ pub fn resolve_compiler_avoiding_wrapper(
     executable.to_path_buf()
 }
 
+pub fn is_trivial_compilation(arguments: &[OsString]) -> bool {
+    arguments
+        .iter()
+        .any(|arg| arg.to_string_lossy().contains("conftest"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Digest, OsStrExt, TimeMacroFinder, resolve_compiler_avoiding_wrapper};

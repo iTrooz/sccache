@@ -752,6 +752,7 @@ pub struct DistConfig {
     pub toolchain_cache_size: u64,
     pub rewrite_includes_only: bool,
     pub force_remote_build: bool,
+    pub try_skip_trivial_dist: bool,
 }
 
 impl Default for DistConfig {
@@ -764,6 +765,7 @@ impl Default for DistConfig {
             toolchain_cache_size: default_toolchain_cache_size(),
             rewrite_includes_only: false,
             force_remote_build: false,
+            try_skip_trivial_dist: true,
         }
     }
 }
@@ -2459,6 +2461,7 @@ key_prefix = "cosprefix"
                 toolchain_cache_size: 5368709120,
                 rewrite_includes_only: false,
                 force_remote_build: false,
+                try_skip_trivial_dist: true,
             },
             server_startup_timeout_ms: Some(10000),
             basedirs: vec![],

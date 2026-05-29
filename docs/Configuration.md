@@ -37,6 +37,9 @@ toolchains = []
 # the maximum size of the toolchain cache in bytes
 toolchain_cache_size = 5368709120
 cache_dir = "/home/user/.cache/sccache-dist-client"
+# If true, sccache will try to detect and compile small jobs locally
+# (e.g., autotools configure checks).
+# try_skip_trivial_dist = true
 # If true, jobs that can be remote compilated trigger an error instead of fallback back locally
 # force_remote_build = false
 

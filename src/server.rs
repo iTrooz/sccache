@@ -278,6 +278,7 @@ pub struct DistClientConfig {
     pub toolchains: Vec<config::DistToolchainConfig>,
     pub rewrite_includes_only: bool,
     pub force_remote_build: bool,
+    pub try_skip_trivial_dist: bool,
 }
 
 #[cfg(feature = "dist-client")]
@@ -340,6 +341,7 @@ impl DistClientContainer {
             toolchains: config.dist.toolchains.clone(),
             rewrite_includes_only: config.dist.rewrite_includes_only,
             force_remote_build: config.dist.force_remote_build,
+            try_skip_trivial_dist: config.dist.try_skip_trivial_dist,
         };
         let state = Self::create_state(config);
         let state = pool.block_on(state);
@@ -1178,6 +1180,7 @@ where
                     toolchains: vec![],
                     rewrite_includes_only: false,
                     force_remote_build: false,
+                    try_skip_trivial_dist: true,
                 }),
                 dist_client,
             ))),

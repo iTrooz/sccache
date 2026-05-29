@@ -775,5 +775,8 @@ pub trait Client: Send + Sync {
     ) -> Result<(Toolchain, Option<(String, PathBuf)>)>;
     fn rewrite_includes_only(&self) -> bool;
     fn force_remote_build(&self) -> bool;
+    fn try_skip_trivial_dist(&self) -> bool {
+        false
+    }
     fn get_custom_toolchain(&self, exe: &Path) -> Option<PathBuf>;
 }

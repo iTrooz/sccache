@@ -1167,6 +1167,7 @@ mod client {
         tc_cache: Arc<cache::ClientToolchains>,
         rewrite_includes_only: bool,
         force_remote_build: bool,
+        try_skip_trivial_dist: bool,
     }
 
     impl Client {
@@ -1200,6 +1201,7 @@ mod client {
                 tc_cache: Arc::new(client_toolchains),
                 rewrite_includes_only: config.rewrite_includes_only,
                 force_remote_build: config.force_remote_build,
+                try_skip_trivial_dist: config.try_skip_trivial_dist,
             })
         }
 
@@ -1455,6 +1457,9 @@ mod client {
         }
         fn force_remote_build(&self) -> bool {
             self.force_remote_build
+        }
+        fn try_skip_trivial_dist(&self) -> bool {
+            self.try_skip_trivial_dist
         }
         fn get_custom_toolchain(&self, exe: &Path) -> Option<PathBuf> {
             match self.tc_cache.get_custom_toolchain(exe) {
