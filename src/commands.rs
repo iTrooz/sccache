@@ -21,7 +21,7 @@ use crate::jobserver::Client;
 use crate::mock_command::{CommandChild, CommandCreatorSync, ProcessCommandCreator, RunCommand};
 use crate::protocol::{Compile, CompileFinished, CompileResponse, Request, Response};
 use crate::server::{self, DistInfo, ServerInfo, ServerStartup, ServerStats};
-use crate::util::daemonize;
+use crate::util::{daemonize, resolve_compiler_avoiding_wrapper};
 use byteorder::{BigEndian, ByteOrder};
 use fs::{File, OpenOptions};
 use fs_err as fs;
@@ -712,6 +712,9 @@ where
 {
     trace!("do_compile");
     let exe_path = which_in(exe, path, cwd)?;
+    let exe_path = resolve_compiler_avoiding_wrapper(&exe_path, &env_vars);
+    debug!("do_compile: resolved {:?} to {:?}", exe, exe_path);
+
     let res = request_compile(&mut conn, &exe_path, &cmdline, cwd, env_vars)?;
     handle_compile_response(
         creator, runtime, &mut conn, res, &exe_path, cmdline, cwd, stdout, stderr,

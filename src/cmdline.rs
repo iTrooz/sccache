@@ -18,7 +18,6 @@ use std::env;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::str::FromStr;
-use which::which_in;
 
 const ENV_VAR_INTERNAL_START_SERVER: &str = "SCCACHE_START_SERVER";
 
@@ -222,30 +221,13 @@ pub fn try_parse() -> Result<Command> {
                 // If the executable has its standard name, do nothing.
                 Some(ref e) if e == env!("CARGO_PKG_NAME") => {}
                 // Otherwise, if it was copied/linked under a different $name, act
-                // as if it were invoked with `sccache $name`, but avoid $name resolving
-                // to ourselves again if it's in the PATH.
+                // as if it were invoked with `sccache $name`.
                 _ => {
-                    if let (Some(path), Some(exe_filename)) = (env::var_os("PATH"), exe.file_name())
-                    {
-                        match which_in(exe_filename, Some(&path), &cwd) {
-                            Ok(ref full_path)
-                                if full_path.canonicalize()?
-                                    == env::current_exe()?.canonicalize()? =>
-                            {
-                                if let Some(dir) = full_path.parent() {
-                                    let path = env::join_paths(
-                                        env::split_paths(&path).filter(|p| p != dir),
-                                    )
-                                    .ok();
-                                    if let Ok(full_path) = which_in(exe_filename, path, &cwd) {
-                                        args[0] = full_path.into();
-                                    }
-                                }
-                            }
-                            Ok(full_path) => args[0] = full_path.into(),
-                            Err(_) => {}
-                        }
+                    if let Some(exe_filename) = exe.file_name() {
+                        args[0] = exe_filename.into();
                         args.insert(0, env!("CARGO_PKG_NAME").into());
+                    } else {
+                        bail!("Couldn't determine executable name for sccache");
                     }
                 }
             }

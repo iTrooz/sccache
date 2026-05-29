@@ -1293,6 +1293,10 @@ pub fn resolve_compiler_avoiding_wrapper(
         }
     }
 
+    log::debug!(
+        "No valid compiler found in PATH for {:?}, returning original",
+        executable
+    );
     // No valid match found, return the original
     executable.to_path_buf()
 }
