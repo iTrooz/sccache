@@ -312,6 +312,7 @@ fn run_server_process(startup_timeout: Option<Duration>) -> Result<ServerStartup
 fn connect_or_start_server(
     addr: &crate::net::SocketAddr,
     startup_timeout: Option<Duration>,
+    manage_server: bool,
 ) -> Result<ServerConnection> {
     trace!("connect_or_start_server({addr})");
     match connect_to_server(addr) {
@@ -321,6 +322,12 @@ fn connect_or_start_server(
                 || e.kind() == io::ErrorKind::TimedOut)
                 || (e.kind() == io::ErrorKind::NotFound && addr.is_unix_path()) =>
         {
+            if !manage_server {
+                bail!(
+                    "Couldn't connect to sccache server at {addr}. The server is not managed by sccache (manage_server = false).\n\
+                     Make sure the external service (e.g. systemd) is running."
+                );
+            }
             // If the connection was refused we probably need to start
             // the server.
             match run_server_process(startup_timeout)? {
@@ -800,7 +807,7 @@ pub fn run_command(cmd: Command) -> Result<i32> {
         }
         Command::ZeroStats => {
             trace!("Command::ZeroStats");
-            let conn = connect_or_start_server(&get_addr(), startup_timeout)?;
+            let conn = connect_or_start_server(&get_addr(), startup_timeout, config.manage_server)?;
             request_zero_stats(conn).context("couldn't zero stats on server")?;
             eprintln!("Statistics zeroed.");
         }
@@ -862,7 +869,7 @@ pub fn run_command(cmd: Command) -> Result<i32> {
         ),
         Command::DistStatus => {
             trace!("Command::DistStatus");
-            let srv = connect_or_start_server(&get_addr(), startup_timeout)?;
+            let srv = connect_or_start_server(&get_addr(), startup_timeout, config.manage_server)?;
             let status =
                 request_dist_status(srv).context("failed to get dist-status from server")?;
             serde_json::to_writer(&mut io::stdout(), &status)?;
@@ -870,7 +877,7 @@ pub fn run_command(cmd: Command) -> Result<i32> {
         }
         Command::DistTestConn => {
             trace!("Command::DistTestConn");
-            let srv = connect_or_start_server(&get_addr(), startup_timeout)?;
+            let srv = connect_or_start_server(&get_addr(), startup_timeout, config.manage_server)?;
             let status = request_dist_test_conn(srv)
                 .context("failed to test distributed build server connectivity")?;
             serde_json::to_writer(&mut io::stdout(), &status)?;
@@ -924,7 +931,7 @@ pub fn run_command(cmd: Command) -> Result<i32> {
                 });
 
             let jobserver = Client::new();
-            let conn = connect_or_start_server(&get_addr(), startup_timeout)?;
+            let conn = connect_or_start_server(&get_addr(), startup_timeout, config.manage_server)?;
             let mut runtime = Runtime::new()?;
             let res = do_compile(
                 ProcessCommandCreator::new(&jobserver),

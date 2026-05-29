@@ -29,6 +29,10 @@ basedirs = ["/home/user/project"]
 # Path to a file where the sccache daemon will log its output.
 # If set, the daemon stops logging to stderr log_file = "/var/log/sccache.log"
 
+# If set to false, sccache will not manage (start/stop) its own server process.
+# but `SCCACHE_START_SERVER=1` or `sccache --start-server` will still start the server.
+# manage_server = true
+
 [dist]
 # where to find the scheduler
 scheduler_url = "http://1.2.3.4:10600"

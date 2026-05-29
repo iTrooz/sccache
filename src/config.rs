@@ -778,6 +778,9 @@ pub struct FileConfig {
     pub cache: CacheConfigs,
     pub dist: DistConfig,
     pub server_startup_timeout_ms: Option<u64>,
+    /// Whether sccache should manage (start/stop) its own server process.
+    /// Set to false when the server is managed externally, e.g. by systemd.
+    pub manage_server: Option<bool>,
     /// Base directories to strip from paths for cache key computation.
     pub basedirs: Vec<String>,
     /// Path to the daemon log file.
@@ -1238,18 +1241,36 @@ fn global_config_file() -> PathBuf {
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Config {
     pub cache: Option<CacheType>,
     pub cache_configs: CacheConfigs,
     pub fallback_cache: DiskCacheConfig,
     pub dist: DistConfig,
     pub server_startup_timeout: Option<std::time::Duration>,
+    /// Whether sccache should manage (start/stop) its own server process.
+    /// Set to false when the server is managed externally, e.g. by systemd.
+    pub manage_server: bool,
     /// Base directory (or directories) to strip from paths for cache key computation.
     /// Similar to ccache's CCACHE_BASEDIR.
     pub basedirs: Vec<Vec<u8>>,
     /// Path to the daemon log file.
     pub log_file: Option<PathBuf>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            cache: None,
+            cache_configs: CacheConfigs::default(),
+            fallback_cache: DiskCacheConfig::default(),
+            dist: DistConfig::default(),
+            server_startup_timeout: None,
+            manage_server: true,
+            basedirs: Vec::new(),
+            log_file: None,
+        }
+    }
 }
 
 impl Config {
@@ -1293,6 +1314,7 @@ impl Config {
             cache,
             dist,
             server_startup_timeout_ms,
+            manage_server,
             basedirs: file_basedirs,
             log_file,
         } = file_conf;
@@ -1358,12 +1380,15 @@ impl Config {
         }
 
         let (caches, fallback_cache) = conf_caches.clone().into_fallback();
+        let manage_server = manage_server.unwrap_or(true);
+
         Ok(Self {
             cache: caches,
             cache_configs: conf_caches,
             fallback_cache,
             dist,
             server_startup_timeout,
+            manage_server,
             basedirs,
             log_file,
         })
@@ -1748,6 +1773,7 @@ fn config_basedirs_overrides() {
         server_startup_timeout_ms: None,
         basedirs: vec!["C:/env/basedir".to_string()],
         log_file: Default::default(),
+        ..Default::default()
     };
 
     let config = Config::from_env_and_file_configs(env_conf, file_conf).unwrap();
@@ -1765,6 +1791,7 @@ fn config_basedirs_overrides() {
         server_startup_timeout_ms: None,
         basedirs: vec!["C:/file/basedir".to_string()],
         log_file: Default::default(),
+        ..Default::default()
     };
 
     let config = Config::from_env_and_file_configs(env_conf, file_conf).unwrap();
@@ -1782,6 +1809,7 @@ fn config_basedirs_overrides() {
         server_startup_timeout_ms: None,
         basedirs: vec!["C:/file/basedir".to_string()],
         log_file: Default::default(),
+        ..Default::default()
     };
 
     let config = Config::from_env_and_file_configs(env_conf, file_conf).unwrap();
@@ -2466,6 +2494,7 @@ key_prefix = "cosprefix"
             server_startup_timeout_ms: Some(10000),
             basedirs: vec![],
             log_file: Some(PathBuf::from("/var/log/sccache.log")),
+            ..Default::default()
         }
     );
 }
@@ -2648,6 +2677,7 @@ fn test_integration_windows_path_normalization() {
         server_startup_timeout_ms: None,
         basedirs: vec!["C:\\Users\\Test\\Project".to_string()],
         log_file: Default::default(),
+        ..Default::default()
     };
 
     let config = Config::from_env_and_file_configs(env_conf, file_conf).unwrap();
@@ -2806,6 +2836,7 @@ fn test_integration_windows_mixed_slashes() {
         server_startup_timeout_ms: None,
         basedirs: vec!["C:\\Users\\test\\project".to_string()],
         log_file: Default::default(),
+        ..Default::default()
     };
 
     let config = Config::from_env_and_file_configs(env_conf, file_conf).unwrap();
