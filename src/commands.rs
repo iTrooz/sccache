@@ -154,23 +154,24 @@ fn redirect_stderr(f: File) {
     }
 }
 
-/// Create the log file and return an error if cannot be created
-fn create_error_log() -> Result<File> {
+/// Create the log file from config or env var, returning None if neither is configured.
+fn create_error_log(config: &Config) -> Result<Option<File>> {
     trace!("Create the log file");
-    let name = match env::var("SCCACHE_ERROR_LOG") {
-        Ok(filename) if !filename.is_empty() => filename,
-        _ => {
-            bail!("Cannot read variable 'SCCACHE_ERROR_LOG'");
-        }
+    let name = match &config.log_file {
+        Some(p) => p.clone(),
+        None => match env::var("SCCACHE_ERROR_LOG") {
+            Ok(filename) if !filename.is_empty() => PathBuf::from(filename),
+            _ => return Ok(None),
+        },
     };
 
     let f = match OpenOptions::new().create(true).append(true).open(&name) {
         Ok(f) => f,
         Err(_) => {
-            bail!("Cannot open/write log file '{}'", &name);
+            bail!("Cannot open/write log file '{}'", name.display());
         }
     };
-    Ok(f)
+    Ok(Some(f))
 }
 
 /// If `SCCACHE_ERROR_LOG` is set, redirect stderr to it.
@@ -755,8 +756,7 @@ pub fn run_command(cmd: Command) -> Result<i32> {
         }
         Command::InternalStartServer => {
             trace!("Command::InternalStartServer");
-            if env::var("SCCACHE_ERROR_LOG").is_ok() {
-                let f = create_error_log()?;
+            if let Some(f) = create_error_log(config)? {
                 // Can't report failure here, we're already daemonized.
                 daemonize()?;
                 redirect_error_log(f)?;
