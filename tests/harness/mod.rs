@@ -568,11 +568,14 @@ impl DistSystem {
     }
 
     pub fn get_scheduler_status(&self) -> SchedulerStatusResult {
-        let res = reqwest::blocking::get(dist::http::urls::scheduler_status(
-            &self.scheduler_url().to_url(),
-        ))
-        .unwrap();
-        assert!(res.status().is_success());
+        let client = reqwest::blocking::Client::new();
+        let res = client
+            .get(dist::http::urls::scheduler_status(
+                &self.scheduler_url().to_url(),
+            ))
+            .bearer_auth("dangerously_insecure_client")
+            .send()
+            .unwrap();
         bincode::deserialize_from(res).unwrap()
     }
 }

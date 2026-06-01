@@ -385,11 +385,8 @@ impl DistClientContainer {
         let state = &mut *guard;
         let (client, scheduler_url) = match state {
             DistClientState::Disabled => return DistInfo::Disabled("disabled".to_string()),
-            DistClientState::FailWithMessage(cfg, _) => {
-                return DistInfo::NotConnected(
-                    cfg.scheduler_url.clone(),
-                    "enabled, auth not configured".to_string(),
-                );
+            DistClientState::FailWithMessage(cfg, msg) => {
+                return DistInfo::NotConnected(cfg.scheduler_url.clone(), msg.clone());
             }
             DistClientState::RetryCreateAt(cfg, time) => {
                 return DistInfo::NotConnected(
@@ -405,9 +402,9 @@ impl DistClientContainer {
 
         match client.do_get_status().await {
             Ok(res) => DistInfo::SchedulerStatus(scheduler_url.clone(), res),
-            Err(_) => DistInfo::NotConnected(
+            Err(err) => DistInfo::NotConnected(
                 scheduler_url.clone(),
-                "could not communicate with scheduler".to_string(),
+                format!("could not communicate with scheduler: {err}"),
             ),
         }
     }
@@ -545,13 +542,19 @@ impl DistClientContainer {
                         DistClientState::Some(Box::new(config), Arc::new(dist_client))
                     }
                     Err(err) => {
-                        warn!(
-                            "Scheduler address configured, but could not communicate with scheduler: {err}"
-                        );
-                        DistClientState::RetryCreateAt(
-                            Box::new(config),
-                            Instant::now() + DIST_CLIENT_RECREATE_TIMEOUT,
-                        )
+                        if let Some(HttpClientError(msg)) = err.downcast_ref::<HttpClientError>() {
+                            let errmsg = format!("authentication rejected: {}", msg);
+                            error!("{}", errmsg);
+                            DistClientState::FailWithMessage(Box::new(config), errmsg)
+                        } else {
+                            warn!(
+                                "Scheduler address configured, but could not communicate with scheduler: {err}"
+                            );
+                            DistClientState::RetryCreateAt(
+                                Box::new(config),
+                                Instant::now() + DIST_CLIENT_RECREATE_TIMEOUT,
+                            )
+                        }
                     }
                 }
             }
